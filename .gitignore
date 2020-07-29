@@ -1,6 +1,6 @@
 *
-!widgets
-!tests
+!widgets/
+!tests/
 !.gitignore
 !readme.md
 !requeriments.txt
