@@ -1,2 +1,7 @@
-venv
-.vscode
+*
+!widgets
+!tests
+!.gitignore
+!readme.md
+!requeriments.txt
+!setup.py
