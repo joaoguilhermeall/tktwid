@@ -41,12 +41,15 @@ class Notification(tk.Toplevel):
         self.wm_attributes("-transparentcolor", TKINTER_COLOR_DEFAULT)
         
     def _position(self, event=None):
-        
-        _x = self.frameref.winfo_rootx() + self.frameref.winfo_width() - (self.winfo_width() + self.padx)
-        _y = self.frameref.winfo_rooty() + self.pady
-        self.geometry()
-        self.geometry("+{}+{}".format(_x, _y))
-        self.lift()
+        try:
+            _x = self.frameref.winfo_rootx() + self.frameref.winfo_width() - (self.winfo_width() + self.padx)
+            _y = self.frameref.winfo_rooty() + self.pady
+            self.geometry()
+            self.geometry("+{}+{}".format(_x, _y))
+            self.lift()
+           
+        except:
+            pass
     
     def _format_message(self, message):
         my_message = ""
@@ -108,6 +111,10 @@ class Notification(tk.Toplevel):
         self.lift()
         frame.after(popout*1000, frame.destroy)
     
+    def set_frameref(self, widget=None):
+        self.frameref = widget if widget is not None else self.master
+        self._position()
+    
     def config(self, ibgc='green', ebgc='red', wbgc='yellow'):
         raise NotImplementedError
     
@@ -140,8 +147,11 @@ class ToplevelCentered(tk.Toplevel):
         super(ToplevelCentered, self).__init__(master, *args, **kw)
         self.transient(master)
         self.resizable(0, 0)
+        
+        self._set_geometry()
+        self.bind('<Configure>', self._set_geometry)
 
-    def _set_geometry(self):
+    def _set_geometry(self, *args):
         x = (self.winfo_screenwidth() - self.winfo_width())//2
         y = (self.winfo_screenheight() - self.winfo_height())//2 - 30
 
@@ -150,7 +160,7 @@ class ToplevelCentered(tk.Toplevel):
     def set_geometry(self): self.after(100, self._set_geometry)
         
 
-class ProgressTopMostThetodayme(tk.Toplevel):
+class ProgressTopMostTheme(tk.Toplevel):
     def __init__(self, master, text, *args, **kw):
         super(ProgressTopMostTheme, self).__init__(master, *args, **kw)
         
@@ -338,6 +348,24 @@ class MenuTheme(tk.Menu):
         return name
 
 
+class _MenuTheme(tk.Menu):
+    def __init__(self, master=None, **kw):
+        menu = ttk.Menubutton(master)
+        super(_MenuTheme, self).__init__(menu, tearoff=0, **kw)
+
+    def add_command(self, label, command, **kw):
+        super().add_command(label=self._format_name(label),
+            command=command, compound="left", **kw)
+
+    def _format_name(self, name):
+        """
+        Format the name for len
+        """
+        name += " "*(30 - len(name))
+        name = "     " + name
+        return name
+
+
 class EntryTheme(ttk.Entry):
     """
     A custom ttk.Entry widget with pre implemented actions like upper, placeholder 
@@ -352,6 +380,7 @@ class EntryTheme(ttk.Entry):
         upper : bool that define how to show caracteres
         placeholder : Text in back
         pattern : A regex for validate the entry
+        maxlength : the maximum number of characters enters into the element.
         mask : Mask to write in entry. Use '9' for numerical ,'a' for alpha,
         '*' for alphanumerical. Exemplo : 99/99/9999. 
         callback : A function to run and format entry content
@@ -364,6 +393,7 @@ class EntryTheme(ttk.Entry):
             'placeholder' : None,
             'pattern'     : None,
             'mask'        : None,
+            'maxlength'   : None,
             'callback'    : None
         }
         self._configs_update(kw)
@@ -377,17 +407,14 @@ class EntryTheme(ttk.Entry):
             *args, **kw)
         
         if self._configs['placeholder'] is not None:
-            self.bind("<FocusIn>", self._foc_in)
-            self.bind("<KeyPress>", self._foc_in)
-            self.bind("<FocusOut>", self._foc_out)
+            self.bind("<FocusIn>", self._foc_in, True)
+            self.bind("<KeyPress>", self._foc_in, True)
+            self.bind("<FocusOut>", self._foc_out, True)
             self._put_placeholder()
         
         if self._configs['pattern'] is not None:
             self._by_char = False
-            self.bind("<FocusOut>", self._validate_pattern)
-        
-        if self._configs['type'] == 'password':
-            self.config(show="●")
+            self.bind("<FocusOut>", self._validate_pattern, True)
         
         self.bind("<KeyRelease>", self._all_upper)
 
@@ -405,7 +432,7 @@ class EntryTheme(ttk.Entry):
                 if key is 'type' and kw[key] not in ['text', 'password', 
                     'email', 'number', 'currency']:
                     #currency not implemented
-                    raise(AttributeError('type -{} not valid'.format(kw[key])))
+                    raise(AttributeError(f'type -{key} not valid'))
                 self._configs[key] = kw.pop(key)
         
         #Autoconfigs
@@ -423,6 +450,10 @@ class EntryTheme(ttk.Entry):
 
         if self._configs['mask'] is not None:
             self._list_index()
+            
+        if self._configs['maxlength'] is not None and \
+                 not isinstance(self._configs['maxlength'], int):
+            raise(AttributeError(f'maxlength -{self._configs["maxlength"]} option need be int.'))
         
     def _list_index(self):
         for i in range(0, len(self._configs['mask'])):
@@ -462,7 +493,13 @@ class EntryTheme(ttk.Entry):
             if self._configs['type'] is 'number' and not S.isnumeric():
                 self.bell()
                 return False
-
+            
+            #When there is a placeholder to remove and text to be inserted
+            if s == self._configs['placeholder']:
+                self._remove_placeholder()
+                self.after(100, lambda : self.insert(0, S))
+                return False
+                
             if self._configs['mask'] is not None and not self._has_placeholder:
                 if len(P) > len(self._configs['mask']): 
                     self.bell()
@@ -470,10 +507,12 @@ class EntryTheme(ttk.Entry):
                 self._mask(int(i), S)
                 return False
             
-            #When there is a placeholder to remove and text to be inserted
-            if s == self._configs['placeholder']:
-                self._remove_placeholder()
-                self.after(100, lambda : self.insert(0, S))
+            if self._configs['maxlength'] is not None and \
+                    len(P) > self._configs['maxlength']:
+                self.bell()
+                if len(S) > 1:
+                    self.insert(i, P[:self._configs['maxlength']])
+                return False
 
         # If delete
         elif d == '0' or d == 0:
@@ -497,8 +536,8 @@ class EntryTheme(ttk.Entry):
             self.update_idletasks()
             position = self.index(tk.INSERT)
             text = self.get().upper()
-            self.delete(0, 'end')
-            self.insert('end', text)
+            self.delete(0, 'end', False)
+            self.insert('end', text, False)
             self.icursor(position)
 
     def _mask(self, index, text=None):
@@ -526,7 +565,7 @@ class EntryTheme(ttk.Entry):
 
     def _put_placeholder(self, *args):
         self._has_placeholder = True
-        self.delete('0', 'end')
+        self.delete('0', 'end', False)
         self.insert(0, self._configs['placeholder'], False)
         self.config(foreground='gray', show="")
         self.icursor(0)
@@ -1294,6 +1333,9 @@ class LabelTheme(ttk.Label):
 
     def set_font(self, font=('Arial', 10, 'normal')):
         self.configure(font=font)
+        
+    def set_text(self, text):
+        self.configure(text=text)
 
     def set_image(self, image, size=(70, 70)):
         """
@@ -1304,6 +1346,7 @@ class LabelTheme(ttk.Label):
         self.image = ImageTk.PhotoImage(image)
         self.configure(image=self.image)
 
+    
     def set_style(self, bg, fg):
         """
         Method for configure a basic Style
@@ -1526,6 +1569,10 @@ class ScrollFrameTheme(FrameTheme):
         else:
             self._vsb.pack_forget()
             self._unbind_scroll()
+        
+        if not self._canvas.winfo_ismapped():
+            self._canvas.yview_moveto('0.0')
+
             
         # whenever the size of the frame changes, alter the scroll region respectively
 
@@ -1605,12 +1652,11 @@ class PreLoadAplication(tk.Tk):
         return super().destroy()
     
     def show(self, delay=50):
-        """Show
+        """Show with
 
         Args:
             delay (int, optional): delay (int, optional): Time in ms to load frames. If image is not a gif time to show image.
-            Defaults to 100.
-            destroy (bool, optional): Decide if will be destroyed after show
+            Defaults to 50.
         """
         self._delay = delay
         self._loaded = False
@@ -1630,6 +1676,134 @@ class PreLoadAplication(tk.Tk):
         self.after(10, self.lift)
         self.mainloop()
         
+
+class TableTheme(ttk.Treeview):
+    def __init__(self, master, heads=None, **kw):
+        self._configs = {
+            
+        }
+        
+        self._update(self._configs, kw)
+        
+        super().__init__(master, cursor='hand2', takefocus=False, **kw)
+        
+        self._columns = []
+        self._menu_to_show = False
+        
+        if heads is not None:
+            self.add_columns(heads)
+                       
+        self.bind("<Enter>", self._bind_enter)
+        self.bind("<Leave>", self._bind_leave)
+    
+    def _bind_enter(self, *args):
+        self.bind("<Motion>", self._auto_selection)
+        
+    def _bind_leave(self, *args):
+        self.unbind("<Motion>")
+        self.selection_clear()
+    
+    def _auto_selection(self, event):
+        # Select row
+        idd = self.identify_row(event.y)
+        self.selection_set(idd)
+        self.focus(idd)
+    
+    def _create_menu(self):    
+        self._menu_to_show = True
+        self._menu = _MenuTheme()
+    
+    def _post_menu(self, event):
+        self._menu.post(event.x_root, event.y_root)
+    
+    def _update(self, options, kw):
+        """
+        Update options with keys in kw
+
+        Args:
+            options (dict):
+            kw (dict):
+        return:
+            options, kw
+        """
+        for key in list(kw.keys()):
+            if key in options.keys():
+                options[key] = kw.pop(key)
+
+        return options, kw
+        
+    def add_action(self, label, command, **kw):
+        """Add a menu and a command with label text. Values from selected row 
+        will be send as argument to command function.
+
+        Args:
+            label (str): Label text
+            command (function): Function will recieve a values in selected row
+        """
+        if not self._menu_to_show:
+            self._create_menu()
+            self.bind('<Button-3>', self._post_menu)
+    
+        self._menu.add_command(label, lambda : command(self.get_selected()), **kw)
+      
+    def add_row(self, row, iid=None, parent=None, **kw):
+        self.insert(
+            '' if parent is None else parent,
+            'end', iid,
+            text=row[0], values=row[1:]
+            )
+        
+    
+    def add_rows(self, rows, parent=None):
+        for row in rows:
+            self.add_row(row)
+    
+    def add_column(self, head):
+        self.column(head)
+        self.heading(head, text=head)
+    
+    def add_columns(self, heads):
+        self.column("#0")
+        self.heading("#0", text=heads[0])
+        self['columns'] = heads[1:]
+        for head in heads[1:]:
+            self.add_column(head)
+    
+    def get(self):
+        pass
+    
+    def get_selected(self):
+        iid = self.focus()
+        selected = self.item(iid)
+        
+        if selected['text'] == "":
+            return []
+        
+        else:
+            valeus = [iid, selected['text']]
+            valeus.extend( [ str(i) for i in selected['values']])
+            return valeus
+    
+    @staticmethod
+    def how_it_works():
+        def print_result(e):
+            print(e)
+            
+        def add_row():
+            table.add_row(['1', '2', 'oie', '4'])    
+        
+        root = tk.Tk()
+        
+        table = TableTheme(root, ['one', 'two', 'three'])
+        table.pack(fill='both', expand=True)
+            
+        table.add_action("Delete", print_result)
+           
+        button = ButtonTheme(root, "Add Row", command=add_row)
+        button.pack()
+        
+        root.mainloop()
+    
         
 class FormTheme(object):
     """
@@ -1688,7 +1862,8 @@ class FormTheme(object):
             
             'width_label' : 15,
             'width_entry' : 15,
-
+            
+            'require_blank_fields' : True,
             'message_require' : "Fill this field!",
             'padding' : 2
         }
@@ -1707,7 +1882,7 @@ class FormTheme(object):
 
         self._field = False
         self._frame_field = None
-
+        
     def __getitem__(self, key):
         try:
             return self._elements[key]
@@ -1760,6 +1935,9 @@ class FormTheme(object):
 
     def _require_value(self, name):
         "If value in name input is empty"
+        if not self._options['require_blank_fields']:
+            return
+        
         message = self._options['message_require']
         if self._elements[name]['help_text'] is not None:
             message +=  "\n  " + self._elements[name]['help_text']
@@ -1921,10 +2099,12 @@ class FormTheme(object):
 
         self._update(options, kw)
         if options['new_line']: self.add_line()
-        LabelTheme(self._line, text=text,
-                   font=("Marsek Demi", 12, "bold")).pack(fill='x', 
-                   padx=self._options['padding'])
-    
+        widget = LabelTheme(self._line, text=text,
+                   font=("Marsek Demi", 12, "bold"))
+        widget.pack(fill='x', padx=self._options['padding'])
+                   
+        return widget
+        
     def add_info(self, text, *args, **kw):
         """
         Add a Label with a text.
@@ -1958,6 +2138,8 @@ class FormTheme(object):
         
         )
         widget.pack(fill='x', padx=self._options['padding'])
+        
+        return widget
         
     def add_image(self, image, size, *args, **kw):
         "Add a image with size (width, height) dimensions on side."
@@ -2125,7 +2307,7 @@ class FormTheme(object):
 
         return widget           
 
-    def add_option(self, name, label, items=None, callback=None, *args, **kw):
+    def add_option(self, name, label=None, items=None, callback=None, *args, **kw):
         options = {
             'new_line' : True,
             'expand' : True,
@@ -2251,6 +2433,7 @@ class FormTheme(object):
             'new_line' : True,
             'font' : self._options['font_link'],
             'expand': True,
+            'side': 'right',
             'align' : 'left'
         }
 
@@ -2264,7 +2447,7 @@ class FormTheme(object):
                             justify = options['align'],
                             cursor='hand2'
                             )
-        widget.pack(fill='x', expand=options['expand'])
+        widget.pack(side=options['side'], fill='x', expand=options['expand'])
 
         if command is not None: widget.bind("<Button-1>", lambda e: command())
 
@@ -2393,6 +2576,7 @@ class FormTheme(object):
         
         return submit
     
+    def destroy(self): self._frame_form.destroy()
     def pack_widget(self, **kw): self._frame_form.pack(fill='both', expand=True)
     def unpack_widget(self): self._frame_form.pack_forget()
     def elements(self): return list(self._elements.keys())
@@ -2452,4 +2636,4 @@ class HowWidgetsThemeWorks(tk.Tk):
     
     
 if __name__ == "__main__":
-    PickerTheme.how_it_works()
+    TableTheme.how_it_works()
