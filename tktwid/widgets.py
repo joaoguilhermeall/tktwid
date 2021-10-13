@@ -2397,16 +2397,16 @@ class FormTheme(object):
             'text': text,
             'icon': None,
             'side': 'right',
+            'new_line' : True,
             'width': self._options['btn_width'],
             'size': self._options['btn_size'],
             'padding': self._options['btn_padding']
         }
         self._update(options, kw)
         
-        try: self._line_buttons
-        except AttributeError: self.add_line_buttons()
+        if options['new_line']: self.add_line()
         
-        widget = ButtonTheme(master = self._line_buttons,
+        widget = ButtonTheme(master = self._line,
                              text = text,
                              command = command,
                              icon = options['icon'],
