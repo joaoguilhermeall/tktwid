@@ -2638,7 +2638,7 @@ class HowTkinterThemeWidgetsWorks(tk.Tk):
         pass
     
     def run(self):
-        pass
+        raise(NotImplementedError("Need Implementation!"))
     
     
 if __name__ == "__main__":
